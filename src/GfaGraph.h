@@ -53,6 +53,8 @@ public:
 	GfaGraph();
 	static GfaGraph LoadFromFile(std::string filename);
 	static GfaGraph LoadFromStream(std::istream& stream);
+	static GfaGraph LoadFromFaFile(std::string filename);
+	static GfaGraph LoadFromFaStream(std::istream& stream);
 	std::string OriginalNodeName(int nodeId) const;
 	size_t totalBp() const;
 	std::vector<DNAString> nodes;

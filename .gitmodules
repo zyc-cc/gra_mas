@@ -7,9 +7,13 @@
 [submodule "parallel-hashmap"]
 	path = parallel-hashmap
 	url = https://github.com/greg7mdp/parallel-hashmap.git
-[submodule "BBHash"]
-	path = BBHash
-	url = https://github.com/maickrau/BBHash.git
 [submodule "MEMfinder"]
 	path = MEMfinder
 	url = https://github.com/maickrau/MEMfinder.git
+[submodule "minimap2"]
+	path = minimap2
+	url = https://github.com/lh3/minimap2.git
+[submodule "gatb-core"]
+	path = gatb-core
+	url = https://github.com/GATB/gatb-core.git
+

@@ -4,13 +4,17 @@
 #include <fstream>
 #include <limits>
 #include <csignal>
+#include <filesystem>
 #include "Aligner.h"
+#include "Msa.h"
 #include "stream.hpp"
 #include "ThreadReadAssertion.h"
 #include "EValue.h"
+#include <gatb/gatb_core.hpp>
 
 int main(int argc, char** argv)
 {
+	//cout<<argc<<endl;
 	GOOGLE_PROTOBUF_VERIFY_VERSION;
 
 	std::cout << "GraphAligner " << VERSION << std::endl;
@@ -70,6 +74,11 @@ int main(int argc, char** argv)
 		("seeds-mxm-length", boost::program_options::value<size_t>(), "minimum length for maximal unique / exact matches (int)")
 		("seeds-mxm-cache-prefix", boost::program_options::value<std::string>(), "store the mum/mem seeding index to the disk for reuse, or reuse it if it exists (filename prefix)")
 		("seeds-mxm-windowsize", boost::program_options::value<size_t>(), "window size for mem/mum seeding (int) (0 for no windowing)")
+		("input-reads", "the inpute graphFile is raw short reads")
+		("kmer-size,k", boost::program_options::value<int>(), "kmer_size")
+		("mode,m", boost::program_options::value<int>(), "mode")
+		("msa-threshold,r", boost::program_options::value<float>(), "msa-threshold")
+		("dbg-build-method", boost::program_options::value<std::string>(), "dbg-build-method")
 	;
 	boost::program_options::options_description alignment("Extension");
 	alignment.add_options()
@@ -169,6 +178,11 @@ int main(int argc, char** argv)
 	params.useDiploidHeuristic = false;
 	params.diploidHeuristicCacheFile = "";
 	params.keepSequenceNameTags = false;
+	params.inputeRawShortReas = false;
+	params.kmerSize = 21;
+	params.mode = 4;
+	params.dbgBuildMethod="bcalm2";
+	params.msaThreshold=0.08;
 
 	std::vector<std::string> outputAlns;
 	bool paramError = false;
@@ -233,6 +247,7 @@ int main(int argc, char** argv)
 	if (vm.count("max-trace-count")) params.maxTraceCount = vm["max-trace-count"].as<size_t>();
 
 	if (vm.count("keep-sequence-name-tags")) params.keepSequenceNameTags = true;
+
 	if (vm.count("verbose")) params.verboseMode = true;
 	if (vm.count("precise-clipping")) params.preciseClippingIdentityCutoff = vm["precise-clipping"].as<double>();
 	if (vm.count("hpc-collapse-reads")) params.hpcCollapse = true;
@@ -243,6 +258,13 @@ int main(int argc, char** argv)
 	if (vm.count("low-memory-mem-index-construction")) params.lowMemoryMEMIndexConstruction = true;
 	if (vm.count("mem-index-no-wavelet-tree")) params.MEMindexUsesWaveletTree = false;
 	if (vm.count("diploid-heuristic-cache")) params.diploidHeuristicCacheFile = vm["diploid-heuristic-cache"].as<std::string>();
+	if (vm.count("input-reads")) params.inputeRawShortReas = true;
+	if (vm.count("kmer-size")) params.kmerSize = vm["kmer-size"].as<int>();
+	if (vm.count("mode")) params.kmerSize = vm["mode"].as<int>();
+	if (vm.count("dbg-build-method")) params.dbgBuildMethod = vm["dbg-build-method"].as<std::string>();
+	if (vm.count("msa-threshold")) params.msaThreshold = vm["msa-threshold"].as<float>();
+	
+
 	if (vm.count("diploid-heuristic"))
 	{
 		params.useDiploidHeuristic = true;
@@ -401,8 +423,32 @@ int main(int argc, char** argv)
 	{
 		params.compressClipped = true;
 	}
-
+	string output=params.outputCorrectedFile;
+	params.mode=2;
+	cout<<"the first graphAligner with bcalm(Abundance min=2)"<<endl;
 	alignReads(params);
+	std::filesystem::remove("dummy.unitigs.fa");
+	cout<<"-----------------end---------------------"<<endl;
 
+	cout<<"the first msa after graphAligner"<<endl;
+	filesystem::copy(output,"gra_am2.fa");
+	std::filesystem::remove(output);
+	msa("gra_am2.fa",params.graphFile,output,params.numThreads,params.msaThreshold);
+	cout<<"-----------------end---------------------"<<endl;
+
+	cout<<"the second graphAligner with bcalm(Abundance min=1)"<<endl;
+	params.mode=1;
+	filesystem::copy(output,"msa1.fa");
+	std::filesystem::remove(output);
+	params.fastqFiles[0]="msa1.fa";
+	alignReads(params);
+	cout<<"-----------------end---------------------"<<endl;
+
+	cout<<"the second msa after graphAligner"<<endl;
+	filesystem::copy(output,"gra_am1.fa");
+	std::filesystem::remove(output);
+	msa("gra_am1.fa",params.graphFile,output,params.numThreads,params.msaThreshold);
+	std::filesystem::remove("dummy.unitigs.fa");
+	cout<<"-----------------end---------------------"<<endl;
 	return 0;
 }

@@ -1,6 +1,7 @@
 #include <sstream>
 #include <iostream>
 #include <fstream>
+
 #include <functional>
 #include <algorithm>
 #include <thread>
@@ -19,6 +20,7 @@
 #include "MinimizerSeeder.h"
 #include "AlignmentSelection.h"
 #include "DiploidHeuristic.h"
+#include "dbgGraphbuild.h"
 
 struct Seeder
 {
@@ -176,6 +178,7 @@ void readFastqs(const std::vector<std::string>& filenames, moodycamel::Concurren
 	{
 		FastQ::streamFastqFromFile(filename, false, [&writequeue](FastQ& read)
 		{
+			//read.reverseComplement();
 			std::shared_ptr<FastQ> ptr = std::make_shared<FastQ>();
 			std::swap(*ptr, read);
 			size_t slept = 0;
@@ -236,6 +239,7 @@ void consumeBytesAndWrite(const std::string& filename, moodycamel::ConcurrentQue
 		for (size_t i = 0; i < gotAlns; i++)
 		{
 			outfile.write(alns[i]->data(), alns[i]->size());
+			//cout<<alns[i]->data()<<alns[i]->size()<<endl;
 		}
 		deallocqueue.enqueue_bulk(alns, gotAlns);
 		wroteAny = true;
@@ -738,6 +742,18 @@ AlignmentGraph getGraph(std::string graphFile, MEMSeeder** mxmSeeder, const Alig
 			auto result = DirectedGraph::BuildFromGFA(graph);
 			return result;
 		}
+		else if (graphFile.substr(graphFile.size() - 3) == ".fa" ||graphFile.substr(graphFile.size() - 6) == ".fasta" || (graphFile.size() > 6 && graphFile.substr(graphFile.size() - 6) == ".fa.gz")|| (graphFile.size() > 9 && graphFile.substr(graphFile.size() - 9) == ".fasta.gz"))
+		{
+			auto graph = GfaGraph::LoadFromFaFile(graphFile);
+			if (loadMxmSeeder)
+			{
+				std::cout << "Build MUM/MEM seeder from the graph" << std::endl;
+				*mxmSeeder = new MEMSeeder { graph, params.seederCachePrefix, params.uniqueMemBonusFactor, params.lowMemoryMEMIndexConstruction, params.MEMindexUsesWaveletTree, params.MEMwindowsize };
+			}
+			std::cout << "Build alignment graph" << std::endl;
+			auto result = DirectedGraph::BuildFromGFA(graph);
+			return result;
+		}
 		else
 		{
 			std::cerr << "Unknown graph type (" << graphFile << ")" << std::endl;
@@ -798,6 +814,7 @@ std::unordered_map<std::string, std::vector<SeedHit>> loadGafSeeds(const Alignme
 void alignReads(AlignerParams params)
 {
 	assertSetNoRead("Preprocessing");
+
 	AlignmentSelection::OverlapIncompatibleFractionCutoff = params.overlapIncompatibleCutoff;
 	{
 		std::ifstream graph { params.graphFile };
@@ -816,7 +833,23 @@ void alignReads(AlignerParams params)
 			std::abort();
 		}
 	}
-
+	if(params.inputeRawShortReas){
+		if(params.dbgBuildMethod=="bcalm2"){
+			GraphUnitigsTemplate<32> graph;
+			string dbgFa=params.graphFile + "_k" + std::to_string(params.kmerSize) + "_a" + std::to_string(params.mode) + ".fa";
+			if(!std::filesystem::exists(dbgFa)) bcalmDbgGraphbuild(params.graphFile, params.kmerSize,params.mode,params.numThreads);
+			params.graphFile=dbgFa;
+			cout<<params.graphFile<<endl;
+		}
+		/*else if(params.dbgBuildMethod=="spades"){
+			spadesDbgGraphbuild(params.graphFile, params.kmerSize);
+			params.graphFile="spades.gfa";
+		}*/
+		else{
+			std::cerr << "no method" << params.dbgBuildMethod << std::endl;
+			std::abort();
+		}	
+	}
 	const std::unordered_map<std::string, std::vector<SeedHit>>* seedHitsToThreads = nullptr;
 	std::unordered_map<std::string, std::vector<SeedHit>> seedHits;
 	MEMSeeder* memseeder = nullptr;
@@ -971,11 +1004,20 @@ void alignReads(AlignerParams params)
 
 	std::cout << "Align" << std::endl;
 	AlignmentStats stats;
+	std::string* alns;
 	std::thread fastqThread { [files=params.fastqFiles, &readFastqsQueue, &readStreamingFinished]() { readFastqs(files, readFastqsQueue, readStreamingFinished); } };
 	std::thread GAMwriterThread { [file=params.outputGAMFile, &outputGAM, &deallocAlns, &allThreadsDone, &GAMWriteDone, verboseMode=params.verboseMode]() { if (file != "") consumeBytesAndWrite(file, outputGAM, deallocAlns, allThreadsDone, GAMWriteDone, verboseMode, false); else GAMWriteDone = true; } };
 	std::thread GAFwriterThread { [file=params.outputGAFFile, &outputGAF, &deallocAlns, &allThreadsDone, &GAFWriteDone, verboseMode=params.verboseMode]() { if (file != "") consumeBytesAndWrite(file, outputGAF, deallocAlns, allThreadsDone, GAFWriteDone, verboseMode, true); else GAFWriteDone = true; } };
 	std::thread JSONwriterThread { [file=params.outputJSONFile, &outputJSON, &deallocAlns, &allThreadsDone, &JSONWriteDone, verboseMode=params.verboseMode]() { if (file != "") consumeBytesAndWrite(file, outputJSON, deallocAlns, allThreadsDone, JSONWriteDone, verboseMode, true); else JSONWriteDone = true; } };
-	std::thread correctedWriterThread { [file=params.outputCorrectedFile, &outputCorrected, &deallocAlns, &allThreadsDone, &correctedWriteDone, verboseMode=params.verboseMode, uncompressed=!params.compressCorrected]() { if (file != "") consumeBytesAndWrite(file, outputCorrected, deallocAlns, allThreadsDone, correctedWriteDone, verboseMode, uncompressed); else correctedWriteDone = true; } };
+	std::thread correctedWriterThread { 
+		[file=params.outputCorrectedFile, &outputCorrected, &deallocAlns, &allThreadsDone, &correctedWriteDone, verboseMode=params.verboseMode, uncompressed=!params.compressCorrected]() { 
+			if (file != "") {
+				consumeBytesAndWrite(file, outputCorrected, deallocAlns, allThreadsDone, correctedWriteDone, verboseMode, uncompressed); 
+			}
+			else 
+				correctedWriteDone = true; 
+		} 
+	};
 	std::thread correctedClippedWriterThread { [file=params.outputCorrectedClippedFile, &outputCorrectedClipped, &deallocAlns, &allThreadsDone, &correctedClippedWriteDone, verboseMode=params.verboseMode, uncompressed=!params.compressClipped]() { if (file != "") consumeBytesAndWrite(file, outputCorrectedClipped, deallocAlns, allThreadsDone, correctedClippedWriteDone, verboseMode, uncompressed); else correctedClippedWriteDone = true; } };
 
 	for (size_t i = 0; i < params.numThreads; i++)

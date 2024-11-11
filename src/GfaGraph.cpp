@@ -71,6 +71,20 @@ GfaGraph GfaGraph::LoadFromFile(std::string filename)
 	}
 	zstr::ifstream file { filename };
 }
+GfaGraph GfaGraph::LoadFromFaFile(std::string filename)
+{
+	if (filename.substr(filename.size()-3) == ".gz")
+	{
+		zstr::ifstream file { filename };
+		return LoadFromFaStream(file);
+	}
+	else
+	{
+		std::ifstream file { filename };
+		return LoadFromFaStream(file);
+	}
+	zstr::ifstream file { filename };
+}
 
 size_t getNameId(std::unordered_map<std::string, size_t>& assigned, const std::string& name, std::vector<DNAString>& nodeSeqs, std::vector<std::string>& originalNodeName)
 {
@@ -89,11 +103,65 @@ size_t getNameId(std::unordered_map<std::string, size_t>& assigned, const std::s
 	assert(name == originalNodeName[found->second]);
 	return found->second;
 }
-
+GfaGraph GfaGraph::LoadFromFaStream(std::istream& file)
+{
+	std::unordered_map<std::string, size_t> nameMapping;
+	GfaGraph result;
+	while (file.good()){
+		std::string line = "";
+		std::getline(file, line);
+		if (line.size() == 0 && !file.good()) break;
+		if (line.size() == 0) continue;
+		std::stringstream sstr {line};
+		std::string seq;
+		std::string idhead;
+		std::string path;
+		sstr >> idhead;
+		std::string idstr=idhead.substr(1);
+		size_t id = getNameId(nameMapping, idstr, result.nodes, result.originalNodeName);
+		while(sstr>>path){
+			std::string tostr;
+			std::string fromstart;
+			std::string toend;
+			std::string overlapstr="20M";
+			int overlap = 0;
+			if(path.find("L:") != 0) continue;
+            std::stringstream path_ss { path };
+            std::string token;
+            char delimiter = ':';
+            std::getline(path_ss, token, delimiter);
+            std::getline(path_ss, token, delimiter);
+            fromstart=token;
+            std::getline(path_ss, token, delimiter);
+			tostr=token;
+			std::getline(path_ss, token, delimiter);
+			toend=token;
+			size_t to = getNameId(nameMapping, tostr, result.nodes, result.originalNodeName);
+			assert(fromstart == "+" || fromstart == "-");
+			assert(toend == "+" || toend == "-");
+			size_t charAfterIndex = 0;
+			overlap = std::stol(overlapstr, &charAfterIndex, 10);
+			assert(overlap >= 0);
+			NodePos frompos {(int)id, fromstart == "+"};
+			NodePos topos {(int)to, toend == "+"};
+			result.edges.emplace_back(frompos, topos, overlap);
+			result.edges.emplace_back(topos.Reverse(), frompos.Reverse(), overlap);
+		}
+		line = "";
+		std::getline(file, line);
+		std::stringstream sstr1 {line};
+		sstr1 >> seq;
+		if (seq == "*") throw CommonUtils::InvalidGraphException { std::string { "Nodes without sequence (*) are not currently supported (nodeid " + idstr + ")" } };
+		assert(seq.size() >= 1);
+		result.nodes[id] = seq;		
+	}
+	return result;
+}
 GfaGraph GfaGraph::LoadFromStream(std::istream& file)
 {
 	std::unordered_map<std::string, size_t> nameMapping;
 	GfaGraph result;
+
 	while (file.good())
 	{
 		std::string line = "";

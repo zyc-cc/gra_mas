@@ -55,6 +55,11 @@ struct AlignerParams
 	std::vector<size_t> diploidHeuristicK;
 	std::string diploidHeuristicCacheFile;
 	bool keepSequenceNameTags;
+	bool inputeRawShortReas;
+	int kmerSize;
+	std::string dbgBuildMethod;
+	int mode;
+	float msaThreshold;
 };
 
 void alignReads(AlignerParams params);
