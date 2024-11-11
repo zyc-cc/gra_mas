@@ -6,7 +6,7 @@
 #include <string>
 #include <sdsl/int_vector.hpp>
 #include <sdsl/select_support_mcl.hpp>
-#include <BooPHF/ParallelBB.h>
+#include “ParallelBB.h”
 #include "AlignmentGraph.h"
 #include "GraphAlignerWrapper.h"
 #include "BooPHF/BooPHF.h"
