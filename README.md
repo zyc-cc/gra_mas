@@ -11,6 +11,8 @@ If you however want to compile GraphAligner yourself, run these:
 
 gatb-core and minimap2 need to be compiled manually.
 
+modify the path to the gatb library in the makefile before compiling.
+
 
 GraphAligner -g short_reads.gfa -f long_reads.fa --corrected-out corrected.fa -x dbg -r 0.8 --input-reads `
 
