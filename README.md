@@ -1,5 +1,5 @@
 
-Bioconda is the recommended installation method. If you however want to compile GraphAligner yourself, run these:
+If you however want to compile GraphAligner yourself, run these:
 
 - Install miniconda https://conda.io/projects/conda/en/latest/user-guide/install/index.html
 - `git clone https://github.com/zyc-cc/gra_mas.git`
